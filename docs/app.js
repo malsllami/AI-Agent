@@ -144,19 +144,45 @@ function رسم_قسم_الحالات_(حالات) {
   }
 
   قسم_الحالات.innerHTML = '<div class="section">' + عنوان +
-    حالات.map(بطاقة_حالة_).join('') + '</div>';
+    حالات.map(function (حالة, فهرس) { return بطاقة_حالة_(حالة, فهرس); }).join('') + '</div>';
 
   قسم_الحالات.querySelectorAll('[data-قرار]').forEach(function (زر) {
     زر.addEventListener('click', معالجة_قرار_);
   });
-  قسم_الحالات.querySelectorAll('[data-مناقشة]').forEach(function (زر) {
+  قسم_الحالات.querySelectorAll('[data-فهرس]').forEach(function (زر) {
     زر.addEventListener('click', function () {
-      alert('لمناقشة هذه الحالة بالتفصيل، افتح محادثة مع Claude Code وأشر لرقم الحالة: ' + زر.dataset.مناقشة);
+      نسخ_تفاصيل_الحالة_(حالات[Number(زر.dataset.فهرس)], زر);
     });
   });
 }
 
-function بطاقة_حالة_(حالة) {
+/**
+ * ينسخ نصًا جاهزًا يحوي كل تفاصيل الحالة إلى الحافظة، ليُلصَق مباشرة
+ * في محادثة جديدة مع Claude Code لمناقشتها بالتفصيل — بدل الحاجة
+ * لفتح الشيت يدويًا ونسخ كل حقل على حدة.
+ */
+async function نسخ_تفاصيل_الحالة_(حالة, زر) {
+  const نص =
+    'أريد مناقشة هذه الحالة من مدير المشاريع الذكي:\n\n' +
+    'المشروع: ' + حالة.اسم_المشروع + '\n' +
+    'رقم الحالة: ' + حالة['رقم الحالة'] + '\n' +
+    'نوع الحالة: ' + حالة['نوع الحالة'] + '\n' +
+    'شدة الحالة: ' + حالة['شدة الحالة'] + '\n' +
+    'الوصف: ' + حالة['الوصف'] + '\n' +
+    'الخطة المقترحة: ' + حالة['الخطة المقترحة'];
+
+  try {
+    await navigator.clipboard.writeText(نص);
+    const نص_الزر_الأصلي = زر.textContent;
+    زر.textContent = 'تم النسخ ✓';
+    زر.disabled = true;
+    setTimeout(function () { زر.textContent = نص_الزر_الأصلي; زر.disabled = false; }, 2000);
+  } catch (خطأ) {
+    alert('تعذّر النسخ التلقائي — انسخ التفاصيل يدويًا:\n\n' + نص);
+  }
+}
+
+function بطاقة_حالة_(حالة, فهرس) {
   const مُعرِّف = حالة['رقم الحالة'];
   return '<div class="plan-item" data-حالة="' + مُعرِّف + '" data-مشروع="' + حالة.اسم_المشروع + '">' +
     '<div class="p-badge">' + حالة.اسم_المشروع + ' — ' + حالة['شدة الحالة'] + '</div>' +
@@ -173,7 +199,7 @@ function بطاقة_حالة_(حالة) {
     '<button class="btn approve" data-قرار="موافقة">موافقة</button>' +
     '<button class="btn revise" data-قرار="تعديل مطلوب">تعديل مطلوب</button>' +
     '<button class="btn reject" data-قرار="رفض">رفض</button>' +
-    '<button class="btn discuss" data-مناقشة="' + مُعرِّف + '">مناقشة التفاصيل</button>' +
+    '<button class="btn discuss" data-فهرس="' + فهرس + '">مناقشة التفاصيل (نسخ)</button>' +
     '</div>' +
     '<div class="decision-note hidden"></div>' +
     '</div>';
