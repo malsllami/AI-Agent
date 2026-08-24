@@ -1,0 +1,9 @@
+# ملفات نظام التشغيل والمحرر
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# اعتماديات Node إن استُخدمت مستقبلًا
+# Node dependencies, if ever used
+node_modules/
