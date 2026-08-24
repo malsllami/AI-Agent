@@ -39,6 +39,20 @@
     <div id="قسم-الحالات"></div>
   </div>
 
+  <!-- نافذة عرض تفاصيل الحالة كاملة للنسخ — تظهر دائمًا (سواء نجح
+       النسخ التلقائي للحافظة أو لا) حتى يبقى النص الكامل مرئيًا ومضمونًا -->
+  <div id="نافذة-النسخ" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2>تفاصيل الحالة كاملة</h2>
+      <p id="حالة-النسخ" class="modal-hint"></p>
+      <textarea id="نص-النسخ" readonly></textarea>
+      <div class="btn-row">
+        <button id="زر-نسخ-يدوي" class="btn approve">نسخ النص</button>
+        <button id="زر-إغلاق-النافذة" class="btn discuss">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
