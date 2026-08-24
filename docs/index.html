@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مدير المشاريع الذكي</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+  <!-- شاشة تسجيل الدخول -->
+  <div id="شاشة-الدخول" class="login-screen">
+    <div class="login-card">
+      <h1>مدير المشاريع الذكي</h1>
+      <div class="sub">أدخل كلمة المرور للمتابعة</div>
+      <form id="نموذج-الدخول">
+        <input id="حقل-كلمة-المرور" type="password" placeholder="كلمة المرور" autocomplete="current-password" required>
+        <div id="رسالة-خطأ-الدخول" class="login-error"></div>
+        <button type="submit" class="btn approve" style="width:100%;padding:12px;">دخول</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- اللوحة الرئيسية -->
+  <div id="اللوحة" class="hidden">
+    <header>
+      <div>
+        <div class="eyebrow">لوحة المتابعة</div>
+        <h1>مدير المشاريع الذكي</h1>
+        <div class="sub">نظرة عامة على كل مشاريعك وحالتها الحالية</div>
+      </div>
+      <button id="زر-الخروج" class="logout-btn">تسجيل الخروج</button>
+    </header>
+
+    <div id="شبكة-المشاريع" class="grid"></div>
+    <div id="قسم-الحالات"></div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
