@@ -17,6 +17,12 @@ const رابط_سهم = 'https://script.google.com/macros/s/AKfycbw349NF15pxwkEd
 const رابط_تصاريح_العمل = 'https://script.google.com/macros/s/AKfycbzjoEvy_CWsYMQ8r3cG7b0W6biDI1vA28s3P6t5dz_f6eZ6Fkn-SvEOKy2wm6KZJTxYFg/exec';
 const رابط_احداثيات_المحطات = 'https://script.google.com/macros/s/AKfycbyxZUSLZNa6UlZLINsfAEe8CmQPoNGJbpnNtUDxP019TfL8uLh_5fuP0e5HE6daP8dh1w/exec';
 
+// عائلة السلامي: مبنية على Supabase (Edge Functions) — رابط مختلف عن باقي
+// المشاريع (لا يمر عبر Google Apps Script). المفتاح "anon" هنا مفتاح عام
+// مخصص أصلًا للاستخدام من المتصفح، وليس سرًا بنفس درجة حساسية كلمة المرور.
+const رابط_عائلة_السلامي = 'https://smdyaausztnoghcuclfl.supabase.co/functions/v1/login';
+const مفتاح_عائلة_السلامي_العام = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtZHlhYXVzenRub2doY3VjbGZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NjAxODIsImV4cCI6MjEwMjAzNjE4Mn0.b59ImVQZG9e272AufabeqIWWDx-UGEf7oqOJK8HsSmY';
+
 const البريد_المستلم_للتقرير = 'malsllami@gmail.com';
 
 /**
@@ -79,7 +85,7 @@ function فحص_سهم_() {
 
 /** فحص "تصاريح العمل": تسجيل دخول بحساب "فحص تلقائي" + تحميل بيانات أساسية */
 function فحص_تصاريح_العمل_() {
-  const دخول = استدعاء_api_(رابط_تصاريح_العمل, { action: 'login', data: { employeeId: '000001' } });
+  const دخول = استدعاء_api_(رابط_تصاريح_العمل, { action: 'login', data: { employeeId: '1' } });
   if (!دخول.نجح || !دخول.بيانات || !دخول.بيانات.ok) {
     const رسالة = وصف_الخطأ_(دخول);
     const لم_يُضف_الحساب_بعد = /غير مسجَّل|غير مسجل/.test(رسالة);
@@ -99,19 +105,50 @@ function فحص_تصاريح_العمل_() {
   return { اسم_المشروع: 'تصاريح العمل - PTW - SFT', سليم: true, ملاحظة: 'تسجيل الدخول وتحميل البيانات يعملان بنجاح' };
 }
 
-/** فحص "عائلة السلامي": معطّل حتى تتوفر بيانات حساب الفحص (يُضاف يدويًا للشجرة) */
+/**
+ * فحص "عائلة السلامي": تسجيل دخول بحساب "فحص تلقائي" (مؤرشف بالشجرة) عبر
+ * Supabase Edge Function مباشرة (مشروع مختلف تقنيًا عن باقي المشاريع —
+ * لا يمر عبر Google Apps Script). كلمة المرور تُقرأ من Script Properties
+ * الخاص بهذا المشروع فقط — لا تُخزَّن إطلاقًا في قاعدة بيانات عائلة السلامي
+ * نفسها. لو لم تكن مخزَّنة بعد، الفحص يبقى معطّلًا بأمان (لا بيانات مزيّفة).
+ */
 function فحص_عائلة_السلامي_() {
   const كلمة_المرور = PropertiesService.getScriptProperties().getProperty('كلمة_مرور_فحص_عائلة_السلامي');
   if (!كلمة_المرور) {
     return {
       اسم_المشروع: 'عائلة السلامي فخذ العافاريت',
       سليم: null,
-      ملاحظة: 'الفحص معطّل مؤقتًا — بانتظار إضافة حساب الفحص التلقائي للشجرة (مؤرشف) وتزويد كلمة المرور'
+      ملاحظة: 'الفحص معطّل مؤقتًا — بانتظار تخزين كلمة مرور حساب الفحص التلقائي'
     };
   }
-  // يُستكمل لاحقًا بعد توفر بيانات الحساب: استدعاء دالة تسجيل الدخول
-  // الخادمية (Supabase Edge Function) بنفس نمط باقي الفحوصات أعلاه.
-  return { اسم_المشروع: 'عائلة السلامي فخذ العافاريت', سليم: null, ملاحظة: 'الفحص لم يُفعَّل بعد' };
+
+  const دخول = استدعاء_api_مع_ترويسات_(رابط_عائلة_السلامي, { nationalId: '1111111111', password: كلمة_المرور }, {
+    apikey: مفتاح_عائلة_السلامي_العام,
+    Authorization: 'Bearer ' + مفتاح_عائلة_السلامي_العام
+  });
+
+  if (!دخول.نجح || !دخول.بيانات || !دخول.بيانات.success) {
+    return { اسم_المشروع: 'عائلة السلامي فخذ العافاريت', سليم: false, ملاحظة: 'فشل تسجيل الدخول: ' + وصف_الخطأ_(دخول) };
+  }
+
+  return { اسم_المشروع: 'عائلة السلامي فخذ العافاريت', سليم: true, ملاحظة: 'تسجيل الدخول يعمل بنجاح' };
+}
+
+/** نفس استدعاء_api_ لكن مع ترويسات إضافية مخصصة (مطلوبة لـSupabase: apikey + Authorization) */
+function استدعاء_api_مع_ترويسات_(الرابط, الحمولة, ترويسات) {
+  try {
+    const استجابة = UrlFetchApp.fetch(الرابط, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: ترويسات,
+      payload: JSON.stringify(الحمولة),
+      muteHttpExceptions: true,
+      followRedirects: true
+    });
+    return { نجح: true, بيانات: JSON.parse(استجابة.getContentText()) };
+  } catch (خطأ) {
+    return { نجح: false, خطأ: خطأ.toString() };
+  }
 }
 
 /** فحص "احداثيات المحطات": تحميل بيانات فقط (تسجيل الدخول غير قابل للفحص الآلي — بصمة إجبارية) */
