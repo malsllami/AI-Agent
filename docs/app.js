@@ -91,8 +91,19 @@ function رسم_بطاقات_المشاريع_(مشاريع) {
     const نص_الحالة = مشروع['الحالة العامة'] || 'بانتظار أول فحص';
     const نص_آخر_فحص = مشروع['آخر فحص'] ? 'آخر فحص: ' + تنسيق_تاريخ_(مشروع['آخر فحص']) : 'لم يُفحص بعد';
 
+    // تدرج دائري (Conic Gradient) يرسم فعليًا نسبة السلامة حول الحلقة،
+    // بلون يطابق حالة المشروع (أخضر=سليم، طيني=تحذير، أحمر=متوقف)
+    const ألوان_الحلقة = {
+      ok: ['var(--sage)', 'var(--sage-l)'],
+      warn: ['var(--clay)', 'var(--clay-l)'],
+      down: ['var(--danger)', 'var(--danger-l)'],
+      unknown: ['var(--muted)', 'var(--bg)']
+    };
+    const [لون_تقدم, لون_خلفية] = ألوان_الحلقة[صنف_الحلقة];
+    const نمط_الحلقة = 'background:conic-gradient(' + لون_تقدم + ' ' + (نسبة_عرض || 0) + '%,' + لون_خلفية + ' 0)';
+
     return '<div class="proj">' +
-      '<div class="ring ' + صنف_الحلقة + '"><span>' + (نسبة_عرض !== null ? نسبة_عرض + '٪' : '؟') + '</span></div>' +
+      '<div class="ring ' + صنف_الحلقة + '" style="' + نمط_الحلقة + '"><span>' + (نسبة_عرض !== null ? نسبة_عرض + '٪' : '؟') + '</span></div>' +
       '<div class="p-name">' + مشروع['اسم المشروع'] + '</div>' +
       '<div class="p-status">' + نص_آخر_فحص + '</div>' +
       '<div class="p-tag ' + صنف_الوسم + '">' + نص_الحالة + '</div>' +
@@ -149,9 +160,15 @@ function بطاقة_حالة_(حالة) {
   const مُعرِّف = حالة['رقم الحالة'];
   return '<div class="plan-item" data-حالة="' + مُعرِّف + '" data-مشروع="' + حالة.اسم_المشروع + '">' +
     '<div class="p-badge">' + حالة.اسم_المشروع + ' — ' + حالة['شدة الحالة'] + '</div>' +
+    '<div class="error-box">' +
+    '<div class="box-label">⚠ المشكلة</div>' +
     '<div class="t">' + حالة['نوع الحالة'] + '</div>' +
     '<div class="d">' + حالة['الوصف'] + '</div>' +
-    '<div class="plan"><b>الخطة المقترحة:</b> ' + حالة['الخطة المقترحة'] + '</div>' +
+    '</div>' +
+    '<div class="solution-box">' +
+    '<div class="box-label">✓ الحل المقترح</div>' +
+    '<div class="d">' + حالة['الخطة المقترحة'] + '</div>' +
+    '</div>' +
     '<div class="btn-row">' +
     '<button class="btn approve" data-قرار="موافقة">موافقة</button>' +
     '<button class="btn revise" data-قرار="تعديل مطلوب">تعديل مطلوب</button>' +
