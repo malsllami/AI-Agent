@@ -41,10 +41,10 @@ const قاعدة_رابط_supabase_management_api_ = 'https://api.supabase.com/v
 // Whitelist داخلي صارم: مفتاح منطقي فقط → مسار + استعلام ثابتَين بالكود. لا مسار بالملف كله يُمرِّر
 // path/url خارجي لهذا الكائن أو لاستدعاء_supabase_management_api_ أدناه.
 const قائمة_نقاط_supabase_management_api_المسموحة_ = {
-  // تحقّق فعلي (تشغيل حقيقي 04-09-2026): بلا services يرجع 400 "services: At least one element is
-  // required" — إلزامي فعلاً وليس تخمينًا. أُضيفت قيمة واحدة فقط (db، الأكثر دلالة لصحة قاعدة
-  // البيانات نفسها) بدل القائمة الخماسية الكاملة دفعة واحدة، بانتظار تأكيد شكل الاستجابة الفعلي.
-  HEALTH: { المسار: 'health', الاستعلام: 'services=db' },
+  // تحقّق فعلي (تشغيل حقيقي 04-09-2026): الخمس قيم db/auth/rest/realtime/storage جميعها مقبولة
+  // (200 بلا رفض) — تدرّج الاختبار: بلا services (400 "At least one element is required") ← db
+  // فقط (200) ← الخمسة معًا (200) — وليس تخمينًا لقائمة enum غير موثَّقة رسميًا.
+  HEALTH: { المسار: 'health', الاستعلام: 'services=db,auth,rest,realtime,storage' },
   USAGE: { المسار: 'analytics/endpoints/usage.api-counts', الاستعلام: '' }
 };
 
