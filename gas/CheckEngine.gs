@@ -25,6 +25,9 @@ const رابط_عائلة_السلامي = 'https://smdyaausztnoghcuclfl.supabas
 // الأعمدة (وليس select('*') على كل شيء كما manage-tree/getFamilyTree الأثقل بكثير) — اختيرت بعد
 // فحص كود الدالتين فعليًا (Step 1 من خطة Level 2)، وليس تخمينًا من اسمها
 const رابط_عائلة_السلامي_الصناديق = 'https://smdyaausztnoghcuclfl.supabase.co/functions/v1/manage-funds';
+// قاعدة PostgREST المباشرة (وليست Edge Function) — Level 3: نبضة قاعدة بيانات خام تتجاوز أي كود
+// Edge Function كليًا، لتمييز حقيقي بين "الدالة معطوبة" و"Postgres نفسه لا يستجيب"
+const رابط_عائلة_السلامي_postgrest = 'https://smdyaausztnoghcuclfl.supabase.co/rest/v1/';
 const مفتاح_عائلة_السلامي_العام = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtZHlhYXVzenRub2doY3VjbGZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NjAxODIsImV4cCI6MjEwMjAzNjE4Mn0.b59ImVQZG9e272AufabeqIWWDx-UGEf7oqOJK8HsSmY';
 
 const البريد_المستلم_للتقرير = 'malsllami@gmail.com';
@@ -113,6 +116,30 @@ function استدعاء_api_(الرابط, الحمولة, ترويسات_إضا
       if (محاولة === 1) { Utilities.sleep(1500); continue; }
       return { نجح: false, خطأ: خطأ.toString(), زمن_ms: زمن_ms };
     }
+  }
+}
+
+/**
+ * Level 3 (DB/Activity): طلب GET مباشر لـPostgREST (وليس POST بجسم JSON كـ"استدعاء_api_" المخصَّصة
+ * لعقد Edge Functions/Apps Script) — يختبر استجابة Postgres نفسه مباشرة، بلا المرور بأي كود
+ * Edge Function وسيط. يقيس زمن_ms بنفس نمط استدعاء_api_ بالضبط (قبل/بعد الطلب، حتى عند الفشل).
+ * نجاح PostgREST الحقيقي = استجابة تُرجع مصفوفة صفوف مباشرة (وليس {success:...} كعقد Edge Functions).
+ * @param {string} مسار مثال: "الإعدادات العامة?select=المفتاح&limit=1" (يُبنى بترميز URL صحيح من المستدعي)
+ * @return {{نجح:boolean, بيانات?:*, خطأ?:string, زمن_ms:number}}
+ */
+function استدعاء_postgrest_(مسار) {
+  const بداية_القياس = Date.now();
+  try {
+    const استجابة = UrlFetchApp.fetch(رابط_عائلة_السلامي_postgrest + مسار, {
+      method: 'get',
+      headers: { apikey: مفتاح_عائلة_السلامي_العام, Authorization: 'Bearer ' + مفتاح_عائلة_السلامي_العام },
+      muteHttpExceptions: true
+    });
+    const زمن_ms = Date.now() - بداية_القياس;
+    const بيانات = JSON.parse(استجابة.getContentText());
+    return { نجح: true, بيانات: بيانات, زمن_ms: زمن_ms };
+  } catch (خطأ) {
+    return { نجح: false, خطأ: خطأ.toString(), زمن_ms: Date.now() - بداية_القياس };
   }
 }
 
@@ -251,8 +278,10 @@ function فحص_تصاريح_العمل_() {
  * فحص "عائلة السلامي": تسجيل دخول (Core) بحساب "فحص تلقائي" (مؤرشف بالشجرة) عبر Supabase Edge
  * Function مباشرة (مشروع مختلف تقنيًا عن باقي المشاريع — لا يمر عبر Google Apps Script)، ثم
  * getFunds من manage-funds (Secondary — قراءة عامة حقيقية بلا تسجيل دخول حتى، اختيرت بعد فحص كود
- * manage-tree/manage-funds فعليًا: أقل حمولة وأخف صلاحيات من manage-tree/getFamilyTree). كلمة
- * المرور تُقرأ من Script Properties الخاص بهذا المشروع فقط. لو لم تكن مخزَّنة بعد، الفحص معطّل بأمان.
+ * manage-tree/manage-funds فعليًا: أقل حمولة وأخف صلاحيات من manage-tree/getFamilyTree)، ثم نبضة
+ * قاعدة بيانات خام عبر PostgREST (Secondary — Level 3: تتجاوز Edge Function كليًا، تفصل حقًا "الدالة
+ * معطوبة" عن "Postgres نفسه لا يستجيب" — عرض عام "الإعدادات العامة"، مُصرَّح anon صراحةً بكود RLS).
+ * كلمة المرور تُقرأ من Script Properties الخاص بهذا المشروع فقط. لو لم تكن مخزَّنة بعد، الفحص معطّل بأمان.
  */
 function فحص_عائلة_السلامي_() {
   const اسم = 'عائلة السلامي فخذ العافاريت';
@@ -279,7 +308,13 @@ function فحص_عائلة_السلامي_() {
   const فشل_صناديق = !صناديق.نجح || !صناديق.بيانات || !صناديق.بيانات.success;
   const فحص_صناديق = بناء_نتيجة_فحص_('getFunds', false, صناديق, فشل_صناديق);
 
-  return تلخيص_نتائج_الفحص_(اسم, [فحص_دخول, فحص_صناديق]);
+  // Level 3 — نبضة قاعدة بيانات خام (PostgREST مباشر، بلا Edge Function وسيط)
+  const مسار_الإعدادات_العامة = encodeURIComponent('الإعدادات العامة') + '?select=' + encodeURIComponent('المفتاح') + '&limit=1';
+  const قاعدة_البيانات = استدعاء_postgrest_(مسار_الإعدادات_العامة);
+  const فشل_قاعدة_البيانات = !قاعدة_البيانات.نجح || !Array.isArray(قاعدة_البيانات.بيانات);
+  const فحص_قاعدة_البيانات = بناء_نتيجة_فحص_('postgrest_مباشر', false, قاعدة_البيانات, فشل_قاعدة_البيانات);
+
+  return تلخيص_نتائج_الفحص_(اسم, [فحص_دخول, فحص_صناديق, فحص_قاعدة_البيانات]);
 }
 
 /** فحص "احداثيات المحطات" الدوري (كل 12 ساعة): تسجيل دخول (Core) + نبضة ping خفيفة (Core) —
