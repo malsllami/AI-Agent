@@ -422,42 +422,113 @@ function تحديث_حالة_المشروع_(اسم_المشروع, سليم) {
   return { حالة: حالة, نسبة: نسبة };
 }
 
-/** يبني ويُرسل تقرير الفحص الدوري كإيميل HTML بجدول ملوّن حسب حالة كل مشروع */
+/** حدود زمن الاستجابة (مللي ثانية) لتلوين عمود "الأداء" — أقل من سريع=🟢، بينهما=🟡، أعلى من متوسط=🔴 */
+const حدود_زمن_الأداء_ = { سريع: 800, متوسط: 2000 };
+
+function رمز_الأداء_(زمن_ms) {
+  if (زمن_ms < حدود_زمن_الأداء_.سريع) return '🟢';
+  if (زمن_ms < حدود_زمن_الأداء_.متوسط) return '🟡';
+  return '🔴';
+}
+
+/**
+ * شارة عرض مُهيكَلة لصف مشروع واحد بالتقرير — طبقة عرض إضافية فوق الحالة الخام المخزَّنة فعليًا
+ * بجدول "الرئيسية" (بلا أي تعديل عليها ولا على تحديث_حالة_المشروع_): تميّز بصريًا "سليم بالكامل"
+ * عن "سليم لكن فحص ثانوي فشل" — رغم أن كلتيهما "سليم" فعليًا بالجدول (بتصميم Level 2 المتفَق عليه:
+ * فشل Secondary لا يُسقط الحالة) — حتى لا يختفي فشل جزئي حقيقي خلف كلمة "سليم" وحدها بالإيميل.
+ * @return {{رمز:string, نص:string, لون:string}}
+ */
+function شارة_عرض_الصف_(نتيجة) {
+  if (نتيجة.الحالة_النهائية === null || نتيجة.الحالة_النهائية === undefined) {
+    return { رمز: '⚪', نص: 'لم يُفحص', لون: '#999999' };
+  }
+  if (نتيجة.الحالة_النهائية === 'متوقف') {
+    return { رمز: '🔴', نص: 'متوقف', لون: '#c0392b' };
+  }
+  const يوجد_فشل_ثانوي = (نتيجة.فحوصات || []).some(function (ف) { return !ف.أساسي && ف.الحالة === 'FAIL'; });
+  if (يوجد_فشل_ثانوي) {
+    return { رمز: '🟠', نص: 'سليم — ملاحظة ثانوية', لون: '#e67e22' };
+  }
+  if (نتيجة.الحالة_النهائية === 'تحذير') {
+    return { رمز: '🟡', نص: 'تحذير', لون: '#e0a800' };
+  }
+  return { رمز: '🟢', نص: 'سليم', لون: '#5c7a63' };
+}
+
+/** نص "التفاصيل" المختصر من فحوصات[] — اسم كل فحص فرعي + رمز حالته (✅ ناجح، ⚠️ ثانوي فاشل، ❌ أساسي فاشل) */
+function نص_تفاصيل_الفحوصات_(فحوصات) {
+  if (!فحوصات || !فحوصات.length) return '—';
+  return فحوصات.map(function (ف) {
+    const رمز = ف.الحالة === 'PASS' ? '✅' : (ف.أساسي ? '❌' : '⚠️');
+    return ف.اسم + ' ' + رمز;
+  }).join('&nbsp;&nbsp;');
+}
+
+/**
+ * يبني ويُرسل تقرير الفحص الدوري كإيميل HTML — جدول ملوّن بحالة كل مشروع + أداء (من زمن_ms المقيس
+ * فعليًا بـ"استدعاء_api_"/"استدعاء_postgrest_") + تفاصيل كل فحص فرعي (من فحوصات[]) + ملخص عام.
+ * تعرض بيانات Level 2/3 المُهيكَلة الموجودة فعلًا (بلا أي مقارنة تاريخية أو اتجاهات — ذلك Level 5).
+ */
 function إرسال_تقرير_الفحص_(نتائج) {
   const الآن = Utilities.formatDate(new Date(), 'Asia/Riyadh', 'yyyy/MM/dd HH:mm');
+  const وقت_التنفيذ = Utilities.formatDate(new Date(), 'Asia/Riyadh', 'hh:mm:ss a');
 
-  // ألوان لكل حالة نهائية ممكنة — نفس القيم المُخزَّنة فعليًا بجدول "الرئيسية"،
-  // وليست حسابًا منفصلاً، لضمان تطابق تام دائمًا بين الجدول والإيميل.
-  const ألوان_الحالة = { 'سليم': '#5c7a63', 'تحذير': '#e0a800', 'متوقف': '#c0392b' };
+  const عدد_المفحوصة = نتائج.filter(function (ن) { return ن.الحالة_النهائية !== null && ن.الحالة_النهائية !== undefined; }).length;
+  const عدد_السليمة = نتائج.filter(function (ن) { return ن.الحالة_النهائية === 'سليم'; }).length;
+  const عدد_بها_أخطاء = عدد_المفحوصة - عدد_السليمة;
+
+  let إجمالي_فحوصات = 0, إجمالي_فشل_أساسي = 0, إجمالي_فشل_ثانوي = 0, مجموع_الأزمنة = 0, عدد_الأزمنة = 0;
+  نتائج.forEach(function (ن) {
+    (ن.فحوصات || []).forEach(function (ف) {
+      إجمالي_فحوصات++;
+      if (ف.الحالة === 'FAIL' && ف.أساسي) إجمالي_فشل_أساسي++;
+      if (ف.الحالة === 'FAIL' && !ف.أساسي) إجمالي_فشل_ثانوي++;
+      مجموع_الأزمنة += ف.زمن_ms || 0;
+      عدد_الأزمنة++;
+    });
+  });
+  const متوسط_الاستجابة = عدد_الأزمنة > 0 ? Math.round(مجموع_الأزمنة / عدد_الأزمنة) : 0;
+  const نتيجة_عامة = عدد_بها_أخطاء === 0 ? '🟢 جميع المشاريع تعمل' : '🔴 ' + عدد_بها_أخطاء + ' مشروع يحتاج انتباهًا';
 
   const صفوف = نتائج.map(function (نتيجة) {
-    const حالة = نتيجة.الحالة_النهائية;
-    const لون = ألوان_الحالة[حالة] || '#999999';
-    const نص_الحالة = حالة || 'لم يُفحص';
+    const شارة = شارة_عرض_الصف_(نتيجة);
     const نسبة = (نتيجة.النسبة_النهائية !== null && نتيجة.النسبة_النهائية !== undefined)
       ? Math.round(نتيجة.النسبة_النهائية * 100) + '%'
       : '—';
+    const زمن_المشروع = (نتيجة.فحوصات || []).reduce(function (s, ف) { return s + (ف.زمن_ms || 0); }, 0);
+    const أداء = (نتيجة.فحوصات && نتيجة.فحوصات.length) ? (رمز_الأداء_(زمن_المشروع) + ' ' + زمن_المشروع + 'ms') : '—';
+    const تفاصيل = (نتيجة.فحوصات && نتيجة.فحوصات.length) ? نص_تفاصيل_الفحوصات_(نتيجة.فحوصات) : (نتيجة.ملاحظة || '—');
+
     return '<tr>' +
       '<td style="padding:10px;border:1px solid #ddd;text-align:center;font-weight:bold;font-size:12px;">' + نتيجة.اسم_المشروع + '</td>' +
-      '<td style="padding:10px;border:1px solid #ddd;text-align:center;font-weight:bold;font-size:12px;color:#fff;background:' + لون + ';">' + نص_الحالة + '</td>' +
+      '<td style="padding:10px;border:1px solid #ddd;text-align:center;font-weight:bold;font-size:12px;color:#fff;background:' + شارة.لون + ';">' + شارة.رمز + ' ' + شارة.نص + '</td>' +
       '<td style="padding:10px;border:1px solid #ddd;text-align:center;font-weight:bold;font-size:12px;">' + نسبة + '</td>' +
-      '<td style="padding:10px;border:1px solid #ddd;text-align:right;font-size:12px;">' + نتيجة.ملاحظة + '</td>' +
+      '<td style="padding:10px;border:1px solid #ddd;text-align:center;font-size:12px;">' + أداء + '</td>' +
+      '<td style="padding:10px;border:1px solid #ddd;text-align:right;font-size:12px;">' + تفاصيل + '</td>' +
       '</tr>';
   }).join('');
 
   const جسم_الرسالة =
     '<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;">' +
     '<h2 style="color:#5c7a63;">تقرير فحص مدير المشاريع الذكي</h2>' +
-    '<p>وقت الفحص: ' + الآن + ' (بتوقيت السعودية)</p>' +
+    '<p>' + الآن + ' (بتوقيت السعودية)</p>' +
+    '<p style="font-weight:bold">' + عدد_المفحوصة + ' مشاريع مفحوصة | ' + عدد_السليمة + ' سليمة | ' + عدد_بها_أخطاء + ' بها ملاحظات</p>' +
+    '<p style="font-weight:bold">النتيجة العامة: ' + نتيجة_عامة + '</p>' +
     '<table style="border-collapse:collapse;width:100%;">' +
     '<tr style="background:#5c7a63;color:#fff;">' +
     '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">المشروع</th>' +
     '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">الحالة</th>' +
-    '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">نسبة السلامة</th>' +
-    '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">ملاحظة</th>' +
+    '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">الصحة</th>' +
+    '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">الأداء</th>' +
+    '<th style="padding:10px;border:1px solid #ddd;font-size:12px;">التفاصيل</th>' +
     '</tr>' +
     صفوف +
     '</table>' +
+    '<p style="font-size:11px;color:#666;margin-top:14px">' +
+      'الفحوصات: ' + إجمالي_فحوصات + ' | Core failures: ' + إجمالي_فشل_أساسي +
+      ' | Secondary failures: ' + إجمالي_فشل_ثانوي + ' | متوسط الاستجابة: ' + متوسط_الاستجابة +
+      'ms | وقت التنفيذ: ' + وقت_التنفيذ +
+    '</p>' +
     '</div>';
 
   MailApp.sendEmail({
